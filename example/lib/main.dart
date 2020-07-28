@@ -16,15 +16,18 @@ class MyApp extends StatefulWidget {
   _MyAppState createState() => _MyAppState();
 }
 
+
+final String janusServer = 'wss://janus-wss.staging.jimber.org/janus';
 final _localRenderer = new RTCVideoRenderer();
 final _remoteRenderer = new RTCVideoRenderer();
 
 class _MyAppState extends State<MyApp> {
-  JanusClient j;
+  JanusClient janusClient;
   Plugin pluginHandle;
   Plugin subscriberHandle;
   MediaStream remoteStream;
   MediaStream myStream;
+
   @override
   void didChangeDependencies() async {
     // TODO: implement didChangeDependencies
@@ -81,27 +84,21 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> initPlatformState() async {
-    setState(() {
-      j = JanusClient(iceServers: [
-        RTCIceServer(
-            url: "stun:40.85.216.95:3478",
-            username: "onemandev",
-            credential: "SecureIt"),
-        RTCIceServer(
-            url: "turn:40.85.216.95:3478",
-            username: "onemandev",
-            credential: "SecureIt")
-      ], server: [
-        'wss://janus.onemandev.tech/websocket',
-        'http://104.45.152.100:55493/janus'
-      ], withCredentials: true, apiSecret: "SecureIt");
-      j.connect(onSuccess: () async {
+    setState(() async {
+      janusClient = JanusClient(servers: [
+        janusServer
+      ], iceServers: [
+        RTCIceServer(url: "stun:stun.l.google.com:19302",credential: 'no cred', username: 'test'),
+      ]);
+      try {
+
+        await janusClient.connect();
         debugPrint('voilla! connection established');
         Map<String, dynamic> configuration = {
-          "iceServers": j.iceServers.map((e) => e.toMap()).toList()
+          "iceServers": janusClient.iceServers.map((e) => e.toMap()).toList()
         };
 
-        j.attach(Plugin(
+        janusClient.attach(Plugin(
             plugin: 'janus.plugin.videoroom',
             onMessage: (msg, jsep) async {
               print('publisheronmsg');
@@ -109,7 +106,7 @@ class _MyAppState extends State<MyApp> {
                 var list = msg["publishers"];
                 print('got publihers');
                 print(list);
-                _newRemoteFeed(j, list[0]["id"]);
+                _newRemoteFeed(janusClient, list[0]["id"]);
               }
 
               if (jsep != null) {
@@ -144,13 +141,12 @@ class _MyAppState extends State<MyApp> {
                       "bitrate": 2000000
                     };
                     RTCSessionDescription offer = await plugin.createOffer();
-                    plugin.send(
-                        message: publish, jsep: offer, onSuccess: () {});
+                    plugin.send(message: publish, jsep: offer, onSuccess: () {});
                   });
             }));
-      }, onError: (e) {
-        debugPrint('some error occured');
-      });
+      } catch (e){
+        print(e);
+      }
     });
   }
 
