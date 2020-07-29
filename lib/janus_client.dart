@@ -127,8 +127,7 @@ class JanusClient {
     var data = parse(await _webSocketStream
         .firstWhere((element) => parse(element)["transaction"] == transaction));
     if (data["janus"] != "success") {
-      plugin
-          .onError("Ooops: " + data["error"].code + " " + data["error"].reason);
+      plugin.onError("Ooops: " + data["error"].code + " " + data["error"].reason);
       return null;
     }
     print(data);

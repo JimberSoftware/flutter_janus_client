@@ -65,21 +65,19 @@ class PluginHandle {
       _webRTCHandle.myStream = await navigator.getUserMedia(mediaConstraints);
       _webRTCHandle.pc.addStream(_webRTCHandle.myStream);
       return _webRTCHandle.myStream;
-    } else {
-      debugPrint("error webrtchandle cant be null");
-      return null;
     }
+    debugPrint("error webrtchandle cant be null");
+    return null;
   }
 
   switchCamera() async {
-    if (_webRTCHandle.myStream != null) {
-      final videoTrack = _webRTCHandle.myStream
-          .getVideoTracks()
-          .firstWhere((track) => track.kind == "video");
-      await videoTrack.switchCamera();
-    } else {
+    if (_webRTCHandle.myStream == null) {
       throw "Media devices and stream not initialized,try calling initializeMediaDevices() ";
     }
+    final videoTrack = _webRTCHandle.myStream
+        .getVideoTracks()
+        .firstWhere((track) => track.kind == "video");
+    await videoTrack.switchCamera();
   }
 
   send(
@@ -101,51 +99,52 @@ class PluginHandle {
     request["session_id"] = sessionId;
     request["handle_id"] = handleId;
 //    debugPrint(request.toString());
-    if (webSocketSink != null && webSocketStream != null) {
-      webSocketSink.add(stringify(request));
-      dynamic json = parse(await webSocketStream.firstWhere(
-          (element) => parse(element)["transaction"] == transaction));
-      if (json["janus"] == "success") {
-        // We got a success, must have been a synchronous transaction
-        var plugindata = json["plugindata"];
-        if (plugindata == null) {
-          debugPrint("Request succeeded, but missing plugindata...");
-          if (onSuccess != null) {
-            onSuccess();
-          }
-          return;
-        }
-        debugPrint("Synchronous transaction successful (" +
-            plugindata["plugin"] +
-            ")");
-        var data = plugindata["data"];
-//        debugPrint(data.toString());
+    if (webSocketSink == null || webSocketStream == null) {
+      throw "no websocket";
+    }
+
+    webSocketSink.add(stringify(request));
+
+    dynamic json = parse(await webSocketStream
+        .firstWhere((element) => parse(element)["transaction"] == transaction));
+    var eventName = json["janus"];
+
+    if (eventName == "success") {
+      // We got a success, must have been a synchronous transaction
+      var plugindata = json["plugindata"];
+      if (plugindata == null) {
+        debugPrint("Request succeeded, but missing plugindata...");
         if (onSuccess != null) {
-          onSuccess(data);
-        }
-        return;
-      } else if (json["janus"] != "ack") {
-        // Not a success and not an ack, must be an error
-        if (json["error"] != null) {
-          debugPrint("Ooops: " +
-              json["error"].code +
-              " " +
-              json["error"].reason); // FIXME
-          if (onError != null) {
-            onError(json["error"].code + " " + json["error"].reason);
-          }
-        } else {
-          debugPrint("Unknown error"); // FIXME
-          if (onError != null) {
-            onError("Unknown error");
-          }
+          onSuccess();
         }
         return;
       }
-      // If we got here, the plugin decided to handle the request asynchronously
+      debugPrint(
+          "Synchronous transaction successful (" + plugindata["plugin"] + ")");
+      var data = plugindata["data"];
+//        debugPrint(data.toString());
+      if (onSuccess != null) {
+        onSuccess(data);
+      }
+      return;
+    }
+
+    if (eventName == "ack") {
       if (onSuccess != null) {
         onSuccess();
       }
+      return;
+    }
+
+    // Not a success and not an ack, must be an error
+    if (json["error"] == null || onError != null) {
+      debugPrint("Unknown error"); // FIXME
+    }
+
+    debugPrint(
+        "Ooops: " + json["error"].code + " " + json["error"].reason); // FIXME
+    if (onError != null) {
+      onError(json["error"].code + " " + json["error"].reason);
     }
 
     return;
@@ -197,23 +196,6 @@ class PluginHandle {
       onError("Invalid data");
       return;
     }
-
-//    var label = callbacks.label ? callbacks.label : Janus.dataChanDefaultLabel;
-//    if(!config.dataChannel[label]) {
-//      // Create new data channel and wait for it to open
-//      createDataChannel(handleId, label, callbacks.protocol, false, data, callbacks.protocol);
-//      callbacks.success();
-//      return;
-//    }
-//    if(config.dataChannel[label].readyState !== "open") {
-//      config.dataChannel[label].pending.push(data);
-//      callbacks.success();
-//      return;
-//    }
-//    Janus.log("Sending data on data channel <" + label + ">");
-//    Janus.debug(data);
-//    config.dataChannel[label].send(data);
-//    callbacks.success();
   }
 // todo createOffer(callbacks): asks the library to create a WebRTC compliant OFFER;
 // todo createAnswer(callbacks): asks the library to create a WebRTC compliant ANSWER;
@@ -223,5 +205,4 @@ class PluginHandle {
 // todo getBitrate(): gets a verbose description of the currently received stream bitrate;
 // todo hangup(sendRequest): tells the library to close the PeerConnection; if the optional sendRequest argument is set to true, then a hangup Janus API request is sent to Janus as well (disabled by default, Janus can usually figure this out via DTLS alerts and the like but it may be useful to enable it sometimes);
 // todo detach(parameters):
-
 }
